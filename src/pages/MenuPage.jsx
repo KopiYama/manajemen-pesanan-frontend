@@ -110,17 +110,17 @@ const MenuPage = () => {
     try {
       setCheckoutLoading(true);
       
-      // Calculate total locally to ensure it matches the items being sent
+      // Calculate total locally
       const localTotal = items.reduce((sum, item) => sum + (item.harga * item.quantity), 0);
       
-      // Susun payload multi-item sesuai dokumentasi baru
+      // Format payload sesuai kebutuhan backend (Clean Architecture)
       const orderData = {
         customerName: `${customerName.trim()} (Meja ${tableNumber.trim()})`,
         totalPrice: localTotal,
         items: items.map(item => ({
           menuItem: item.namaMenu,
-          quantity: parseInt(item.quantity),
-          price: parseFloat(item.harga)
+          quantity: item.quantity,
+          price: item.harga
         }))
       };
 
