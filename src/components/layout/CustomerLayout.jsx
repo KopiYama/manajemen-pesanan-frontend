@@ -1,12 +1,12 @@
 import React from 'react';
 import { Box, Container } from '@mui/material';
-import Navbar from './Navbar';
+import CustomerNavbar from './CustomerNavbar';
 import { Outlet } from 'react-router-dom';
 
-const Layout = () => {
+const CustomerLayout = () => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <Navbar />
+      <CustomerNavbar />
       <Container maxWidth="lg" sx={{ py: 4, flexGrow: 1 }}>
         <Outlet />
       </Container>
@@ -14,4 +14,4 @@ const Layout = () => {
   );
 };
 
-export default Layout;
+export default CustomerLayout;

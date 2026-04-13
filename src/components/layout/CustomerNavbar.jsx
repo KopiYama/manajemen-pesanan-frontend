@@ -1,15 +1,15 @@
 import React from 'react';
-import { AppBar, Toolbar, Typography, Button, Badge, IconButton, Box, Container } from '@mui/material';
-import { ShoppingCart, RestaurantMenu, ReceiptLong, Kitchen, Settings } from '@mui/icons-material';
+import { AppBar, Toolbar, Typography, IconButton, Badge, Box, Container, Button } from '@mui/material';
+import { ShoppingCart, RestaurantMenu, ReceiptLong } from '@mui/icons-material';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 
-const Navbar = () => {
+const CustomerNavbar = () => {
   const { items } = useCart();
   const location = useLocation();
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Hanya tampilkan cart icon di halaman menu (sesuai spesifikasi)
+  // Check if we are on the menu page to show the cart badge
   const isMenuPage = location.pathname === '/menu' || location.pathname === '/';
 
   return (
@@ -33,10 +33,10 @@ const Navbar = () => {
             <RestaurantMenu /> RestoApp
           </Typography>
 
-          <Box sx={{ display: 'flex', gap: { xs: 1, md: 2 } }}>
-            <Button component={RouterLink} to="/menu" startIcon={<RestaurantMenu />} color="inherit">Menu</Button>
-            <Button component={RouterLink} to="/kitchen" startIcon={<Kitchen />} color="inherit">Dapur</Button>
-            <Button component={RouterLink} to="/admin" startIcon={<Settings />} color="inherit">Admin</Button>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Button component={RouterLink} to="/menu" color={isMenuPage ? "primary" : "inherit"} sx={{ fontWeight: 700 }}>
+              Menu
+            </Button>
             
             {isMenuPage && (
               <IconButton color="primary">
@@ -52,4 +52,4 @@ const Navbar = () => {
   );
 };
 
-export default Navbar;
+export default CustomerNavbar;
