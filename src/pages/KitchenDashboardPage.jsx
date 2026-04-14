@@ -3,8 +3,9 @@ import {
   Grid, Paper, Typography, Box, Card, CardContent, 
   Button, Chip, Divider, List, ListItem, ListItemText 
 } from '@mui/material';
-import { PlayArrow, Check, DoneAll, AccessTime } from '@mui/icons-material';
+import { PlayArrow, Check, DoneAll, AccessTime, Payments, Money } from '@mui/icons-material';
 import { getKitchenQueue, getKitchenInProgress, getKitchenReady, updateOrderStatus } from '../api/kitchenApi';
+import * as paymentApi from '../api/paymentApi';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ErrorAlert from '../components/shared/ErrorAlert';
 
@@ -48,6 +49,17 @@ const KitchenDashboardPage = () => {
     }
   };
 
+  const handlePayCash = async (orderId, amount) => {
+    try {
+      await paymentApi.payByCash(orderId, amount);
+      alert('Pembayaran tunai berhasil dicatat!');
+      fetchData();
+    } catch (err) {
+      console.error('Cash Payment Error:', err);
+      alert('Gagal mencatat pembayaran tunai.');
+    }
+  };
+
   if (loading) return <LoadingSpinner message="Menghubungkan ke Dapur..." />;
   if (error) return <ErrorAlert message={error} onRetry={fetchData} />;
 
@@ -77,6 +89,23 @@ const KitchenDashboardPage = () => {
                 <Typography variant="body2" sx={{ mb: 1, fontWeight: 600, color: 'text.secondary' }}>
                   Pelanggan: {order.customerName}
                 </Typography>
+
+                <Box sx={{ mb: 1.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Chip 
+                    size="small" 
+                    icon={order.paymentMethod === 'CASH' ? <Money /> : <Payments />}
+                    label={order.paymentMethod === 'CASH' ? 'TUNAI' : 'ONLINE'} 
+                    variant="outlined"
+                    sx={{ height: 20, fontSize: '0.65rem' }}
+                  />
+                  <Chip 
+                    size="small" 
+                    label={order.paymentStatus === 'PAID' ? 'LUNAS' : 'BELUM BAYAR'} 
+                    color={order.paymentStatus === 'PAID' ? 'success' : 'error'}
+                    sx={{ height: 20, fontSize: '0.65rem', fontWeight: 'bold' }}
+                  />
+                </Box>
+
                 <List dense disablePadding>
                   {order.items && order.items.length > 0 ? (
                     order.items.map((item, idx) => (
@@ -98,6 +127,21 @@ const KitchenDashboardPage = () => {
                     <Typography variant="caption" color="error">Detail menu tidak tersedia</Typography>
                   )}
                 </List>
+
+                {order.paymentStatus === 'UNPAID' && order.paymentMethod === 'CASH' && (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="secondary"
+                    size="small"
+                    startIcon={<Payments />}
+                    onClick={() => handlePayCash(order.orderId || order.id, order.totalPrice)}
+                    sx={{ mt: 2, fontWeight: 'bold' }}
+                  >
+                    Bayar Tunai
+                  </Button>
+                )}
+
                 {nextStatus && (
                   <Button
                     fullWidth

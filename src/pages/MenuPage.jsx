@@ -3,11 +3,13 @@ import {
   Grid, Card, CardContent, CardMedia, Typography, Button, 
   Box, Chip, Drawer, List, ListItem, ListItemText, 
   Divider, IconButton, TextField, InputAdornment, Stack,
-  Snackbar, Alert, CircularProgress
+  Snackbar, Alert, CircularProgress,
+  Radio, RadioGroup, FormControlLabel, FormControl, FormLabel
 } from '@mui/material';
-import { Add, Remove, ShoppingCart, Search } from '@mui/icons-material';
+import { Add, Remove, ShoppingCart, Search, Payment } from '@mui/icons-material';
 import * as menuApi from '../api/menuApi';
 import * as orderApi from '../api/orderApi';
+import * as paymentApi from '../api/paymentApi';
 import { useCart } from '../context/CartContext';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
@@ -42,11 +44,22 @@ const MenuPage = () => {
   
   const [customerName, setCustomerName] = useState('');
   const [tableNumber, setTableNumber] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   const { items, addToCart, removeFromCart, updateQuantity, clearCart, total } = useCart();
   const navigate = useNavigate();
+
+  const finalizeOrder = (orderId) => {
+    clearCart();
+    setDrawerOpen(false);
+    setCustomerName('');
+    setTableNumber('');
+    setTimeout(() => {
+      navigate(`/track/${orderId}`);
+    }, 1500);
+  };
 
   useEffect(() => {
     fetchData();
@@ -117,6 +130,7 @@ const MenuPage = () => {
       const orderData = {
         customerName: `${customerName.trim()} (Meja ${tableNumber.trim()})`,
         totalPrice: localTotal,
+        paymentMethod: paymentMethod,
         items: items.map(item => ({
           menuItem: item.namaMenu,
           quantity: item.quantity,
@@ -127,18 +141,52 @@ const MenuPage = () => {
       console.log('Sending Order Data:', orderData);
 
       const response = await orderApi.createOrder(orderData);
+      const orderResData = response.data.data || response.data;
       
-      if (response.data.success || response.data.id || response.data.data?.id) {
-        const orderId = response.data.data?.id || response.data.id;
-        setSnackbar({ open: true, message: 'Pesanan berhasil dibuat!', severity: 'success' });
-        clearCart();
-        setDrawerOpen(false);
-        setCustomerName('');
-        setTableNumber('');
-        
-        setTimeout(() => {
-          navigate(`/track/${orderId}`);
-        }, 1500);
+      if (response.data.success || orderResData.id) {
+        const orderId = orderResData.id;
+
+        if (paymentMethod === 'MIDTRANS') {
+          try {
+            const snapRes = await paymentApi.getSnapToken({
+              orderId: orderId,
+              amount: localTotal,
+              customerName: customerName.trim()
+            });
+            
+            const snapToken = snapRes.data.snapToken;
+            
+            if (window.snap) {
+              window.snap.pay(snapToken, {
+                onSuccess: (result) => {
+                  setSnackbar({ open: true, message: 'Pembayaran berhasil!', severity: 'success' });
+                  finalizeOrder(orderId);
+                },
+                onPending: (result) => {
+                  setSnackbar({ open: true, message: 'Menunggu pembayaran...', severity: 'info' });
+                  finalizeOrder(orderId);
+                },
+                onError: (result) => {
+                  setSnackbar({ open: true, message: 'Pembayaran gagal!', severity: 'error' });
+                  navigate(`/track/${orderId}`);
+                },
+                onClose: () => {
+                  setSnackbar({ open: true, message: 'Anda menutup jendela pembayaran', severity: 'warning' });
+                  navigate(`/track/${orderId}`);
+                }
+              });
+            } else {
+              throw new Error('Midtrans Snap not loaded');
+            }
+          } catch (snapErr) {
+            console.error('Snap Error:', snapErr);
+            setSnackbar({ open: true, message: 'Gagal inisialisasi pembayaran online', severity: 'error' });
+            navigate(`/track/${orderId}`);
+          }
+        } else {
+          setSnackbar({ open: true, message: 'Pesanan berhasil dibuat! Silakan bayar di kasir.', severity: 'success' });
+          finalizeOrder(orderId);
+        }
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Gagal membuat pesanan';
@@ -298,6 +346,17 @@ const MenuPage = () => {
               onChange={(e) => setTableNumber(e.target.value)}
               required
             />
+            
+            <FormControl sx={{ mt: 1 }}>
+              <FormLabel sx={{ fontWeight: 'bold', mb: 1 }}>Metode Pembayaran</FormLabel>
+              <RadioGroup
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              >
+                <FormControlLabel value="CASH" control={<Radio />} label="Tunai (Bayar di Kasir)" />
+                <FormControlLabel value="MIDTRANS" control={<Radio />} label="Online (Midtrans / QRIS)" />
+              </RadioGroup>
+            </FormControl>
           </Stack>
 
           <Divider sx={{ mb: 2 }} />

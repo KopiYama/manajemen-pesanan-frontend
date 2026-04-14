@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Box, Typography, Paper, Stepper, Step, StepLabel, 
   Divider, List, ListItem, ListItemText, Chip, Button,
-  Card, CardContent
+  Card, CardContent, Snackbar, Alert, Stack
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getOrderById } from '../api/orderApi';
-import { ArrowBack, Receipt, AccessTime, CheckCircle } from '@mui/icons-material';
+import * as paymentApi from '../api/paymentApi';
+import { ArrowBack, Receipt, AccessTime, CheckCircle, Payment as PaymentIcon, Money, CreditCard } from '@mui/icons-material';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ErrorAlert from '../components/shared/ErrorAlert';
 
@@ -42,23 +43,13 @@ const OrderTrackingPage = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
   const fetchOrder = useCallback(async () => {
     try {
       const response = await getOrderById(id);
       // Backend returns { success: true, data: { ... } }
       const orderData = response.data.data || response.data;
-      
-      // Map single menuItem to items array if needed for the UI
-      if (orderData && !orderData.items && orderData.menuItem) {
-        orderData.items = [{
-          id: 'single-item',
-          menuNama: orderData.menuItem,
-          quantity: orderData.quantity,
-          hargaAtOrder: orderData.totalPrice / orderData.quantity
-        }];
-      }
-      
       setOrder(orderData);
       setError(null);
     } catch (err) {
@@ -68,6 +59,38 @@ const OrderTrackingPage = () => {
       setLoading(false);
     }
   }, [id]);
+
+  const handleOnlinePayment = async () => {
+    if (!order) return;
+    try {
+      const snapRes = await paymentApi.getSnapToken({
+        orderId: order.id,
+        amount: order.totalPrice,
+        customerName: order.customerName.split(' (Meja')[0]
+      });
+      
+      const snapToken = snapRes.data.snapToken;
+      
+      if (window.snap) {
+        window.snap.pay(snapToken, {
+          onSuccess: (result) => {
+            setSnackbar({ open: true, message: 'Pembayaran berhasil!', severity: 'success' });
+            fetchOrder();
+          },
+          onPending: (result) => {
+            setSnackbar({ open: true, message: 'Menunggu pembayaran...', severity: 'info' });
+            fetchOrder();
+          },
+          onError: (result) => {
+            setSnackbar({ open: true, message: 'Pembayaran gagal!', severity: 'error' });
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Payment Error:', err);
+      setSnackbar({ open: true, message: 'Gagal inisialisasi pembayaran', severity: 'error' });
+    }
+  };
 
   useEffect(() => {
     fetchOrder();
@@ -101,12 +124,20 @@ const OrderTrackingPage = () => {
               ID Pesanan: {order.id}
             </Typography>
           </Box>
-          <Chip 
-            label={order.status.replace(/_/g, ' ')} 
-            color={order.status === 'COMPLETED' ? 'success' : 'primary'} 
-            variant="filled" 
-            sx={{ fontWeight: 700, px: 2 }}
-          />
+          <Stack direction="row" spacing={1}>
+            <Chip 
+              label={order.paymentStatus === 'PAID' ? 'LUNAS' : 'BELUM BAYAR'} 
+              color={order.paymentStatus === 'PAID' ? 'success' : 'error'} 
+              variant="outlined"
+              sx={{ fontWeight: 700 }}
+            />
+            <Chip 
+              label={order.status.replace(/_/g, ' ')} 
+              color={order.status === 'COMPLETED' ? 'success' : 'primary'} 
+              variant="filled" 
+              sx={{ fontWeight: 700, px: 2 }}
+            />
+          </Stack>
         </Box>
 
         <Box sx={{ mb: 6 }}>
@@ -120,6 +151,42 @@ const OrderTrackingPage = () => {
         </Box>
 
         <Divider sx={{ my: 4 }} />
+
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} mb={4}>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>METODE PEMBAYARAN</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {order.paymentMethod === 'CASH' ? <Money color="action" /> : <CreditCard color="action" />}
+              <Typography variant="body1" fontWeight="bold">
+                {order.paymentMethod === 'CASH' ? 'Tunai (Kasir)' : 'Online (Midtrans)'}
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>STATUS PEMBAYARAN</Typography>
+            <Typography 
+              variant="body1" 
+              fontWeight="bold" 
+              color={order.paymentStatus === 'PAID' ? 'success.main' : 'error.main'}
+            >
+              {order.paymentStatus === 'PAID' ? 'Sudah Dibayar' : 'Belum Dibayar'}
+            </Typography>
+          </Box>
+        </Stack>
+
+        {order.paymentStatus === 'UNPAID' && order.paymentMethod === 'MIDTRANS' && (
+          <Button 
+            fullWidth 
+            variant="contained" 
+            color="primary" 
+            size="large"
+            startIcon={<PaymentIcon />}
+            onClick={handleOnlinePayment}
+            sx={{ mb: 4, py: 1.5, borderRadius: 2, fontWeight: 'bold' }}
+          >
+            Bayar Sekarang
+          </Button>
+        )}
 
         <Typography variant="h6" sx={{ mb: 3, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
           <Receipt fontSize="small" /> Ringkasan Pesanan
@@ -170,6 +237,16 @@ const OrderTrackingPage = () => {
           <AccessTime fontSize="inherit" /> Halaman ini akan diperbarui otomatis setiap 10 detik
         </Typography>
       </Box>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert severity={snackbar.severity} sx={{ width: '100%', fontWeight: 'bold' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
